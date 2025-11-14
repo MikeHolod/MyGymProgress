@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MyGymProgress — Mini App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;padding:12px;max-width:720px;margin:auto}
+    h2{margin-bottom:6px}
+    input,select,button{font-size:16px;margin:6px 0;padding:8px;width:100%}
+    .set{display:flex;gap:8px;margin-bottom:6px}
+    .set input{flex:1}
+    #history div{padding:6px;border-bottom:1px solid #eee}
+    .row{display:flex;gap:8px}
+    .small{flex:1}
+    .muted{color:#666;font-size:13px}
+  </style>
+</head>
+<body>
+  <h2>MyGymProgress</h2>
+  <div id="status">Загрузка...</div>
+  <hr>
+  <div>
+    <label>Мышечная группа
+      <select id="muscle">
+        <option>Грудь</option><option>Спина</option><option>Ноги</option><option>Плечи</option><option>Руки</option>
+      </select>
+    </label>
+  </div>
+
+  <div>
+    <label>Упражнение <input id="exercise" placeholder="Например: Жим лёжа"></label>
+  </div>
+
+  <div id="sets">
+    <div class="set">
+      <input placeholder="Повторения" class="reps" type="number">
+      <input placeholder="Вес (кг)" class="weight" type="number" step="0.5">
+    </div>
+  </div>
+  <div class="row">
+    <button id="addSet" style="flex:1">Добавить подход</button>
+    <button id="save" style="flex:1">Сохранить</button>
+  </div>
+
+  <hr>
+  <h3>История</h3>
+  <div id="history">— пусто —</div>
+
+<script>
+  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  if(tg) tg.expand();
+
+  async function init(){
+    const resp = await fetch('/api/init', {
+      method: 'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({initData: tg ? tg.initData : null})
+    });
+    const json = await resp.json();
+    document.getElementById('status').innerText = json.message || 'Готово';
+    renderHistory(json.history || []);
+  }
+  init();
+
+  document.getElementById('addSet').onclick = ()=> {
+    const div = document.createElement('div');
+    div.className='set';
+    div.innerHTML = '<input placeholder="Повторения" class="reps" type="number"> <input placeholder="Вес (кг)" class="weight" type="number" step="0.5">';
+    document.getElementById('sets').appendChild(div);
+  }
+
+  document.getElementById('save').onclick = async ()=>{
+    const muscle = document.getElementById('muscle').value;
+    const name = document.getElementById('exercise').value || 'Без названия';
+    const sets = Array.from(document.querySelectorAll('.set')).map(s=>({
+      reps: Number(s.querySelector('.reps').value || 0),
+      weight: Number(s.querySelector('.weight').value || 0)
+    })).filter(s=>s.reps>0 && s.weight>0);
+    if(!sets.length){ alert('Добавь хотя бы один подход'); return; }
+    const res = await fetch('/api/log', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({muscle_group: muscle, name, sets, initData: tg ? tg.initData : null})
+    });
+    const r = await res.json();
+    alert('Сохранено. Тоннаж упражнения: ' + r.exercise_total);
+    renderHistory(r.history || []);
+  }
+
+  function renderHistory(h){
+    const div = document.getElementById('history');
+    if(!h.length) return div.innerText = '— пусто —';
+    div.innerHTML = h.map(it=>`<div><b>${it.date}</b>: ${it.name} — тоннаж ${it.total}</div>`).join('');
+  }
+</script>
+</body>
+</html>
